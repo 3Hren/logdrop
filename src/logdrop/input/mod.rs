@@ -7,3 +7,16 @@ pub trait Input {
 }
 
 mod tcp;
+
+mod files {
+
+// Accept [Path].
+// Okay with *.
+// MVP: 1 file
+// V2. 1 dir with changes
+// V3. multiple dirs.
+struct FilesInput {
+
+}
+
+}

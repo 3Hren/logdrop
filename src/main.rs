@@ -106,7 +106,7 @@ fn main() {
         box TCPInput::new("::", 10053) as Box<Input>,
     ];
     let outputs = vec![
-        box FileOutput::new("/tmp1/{parent/child}-{source}-logdrop.log", "[{timestamp}]: {message}") as Box<Output + Send>,
+        box FileOutput::new("/tmp/{parent/child}-{source}-logdrop.log", "[{timestamp}]: {message}") as Box<Output + Send>,
 //        box ElasticsearchOutput::new("localhost", 9200) as Box<Output + Send>,
     ];
     run(inputs, outputs);
