@@ -1,4 +1,7 @@
 *.pro
 *.pro.user
+CMakeLists.txt
 
 target
+
+a.out
