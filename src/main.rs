@@ -58,11 +58,15 @@ impl Processor for Payload {
     }
 }
 
-fn run(inputs: Vec<Box<Input>>, outputs: Vec<Box<Output + Send>>) {
+fn run(inputs: Vec<Box<Input + Send>>, outputs: Vec<Box<Output + Send>>) {
     let (tx, rx) = channel();
 
-    for input in inputs.iter() {
-        input.run(tx.clone());
+    for input in inputs.into_iter() {
+        log!(Info, "Main" -> "starting '{}' input", input.typename());
+        let tx = tx.clone();
+        spawn(proc() {
+            input.run(tx)
+        });
     }
 
     let channels: Vec<Sender<Payload>> = outputs.move_iter().map(|output| {
@@ -103,8 +107,9 @@ fn run(inputs: Vec<Box<Input>>, outputs: Vec<Box<Output + Send>>) {
 fn main() {
     let es = box ElasticsearchOutput::new("localhost", 9200) as Box<Output + Send>;
     let inputs = vec![
-        box TCPInput::new("::", 10053) as Box<Input>,
+        box TCPInput::new("::", 10053) as Box<Input + Send>,
     ];
+
     let outputs = vec![
         box FileOutput::new("/tmp/{parent/child}-{source}-logdrop.log", "[{timestamp}]: {message}") as Box<Output + Send>,
 //        box ElasticsearchOutput::new("localhost", 9200) as Box<Output + Send>,

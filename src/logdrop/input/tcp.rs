@@ -61,6 +61,6 @@ impl Input for TCPInput {
         let listener = TcpListener::bind(self.host.as_slice(), self.port);
 
         let acceptor = listener.listen().unwrap();
-        spawn(proc() TCPInput::accept(acceptor, tx));
+        TCPInput::accept(acceptor, tx);
     }
 }

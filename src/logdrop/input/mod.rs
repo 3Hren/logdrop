@@ -2,21 +2,13 @@ use super::Payload;
 
 pub use self::tcp::TCPInput;
 
+use std;
+
 pub trait Input {
     fn run(&self, tx: Sender<Payload>);
+
+    fn typename(&self) -> &'static str {
+        unsafe { (*std::intrinsics::get_tydesc::<Self>()).name }
+    }
 }
 
-mod tcp;
-
-mod files {
-
-// Accept [Path].
-// Okay with *.
-// MVP: 1 file
-// V2. 1 dir with changes
-// V3. multiple dirs.
-struct FilesInput {
-
-}
-
-}
