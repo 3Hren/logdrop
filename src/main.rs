@@ -6,6 +6,7 @@ extern crate serialize;
 extern crate time;
 extern crate url;
 extern crate http;
+extern crate bigbrother;
 
 use serialize::json::{String, Object};
 
