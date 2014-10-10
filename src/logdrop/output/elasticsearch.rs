@@ -132,10 +132,6 @@ impl ElasticsearchOutput {
 }
 
 impl Output for ElasticsearchOutput {
-    fn name(&self) -> &'static str {
-        return "elasticsearch";
-    }
-
     fn feed(&mut self, payload: &Payload) {
         self.tx.send(Chunk(payload.to_string()));
     }

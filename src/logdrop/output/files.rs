@@ -154,10 +154,6 @@ impl FileOutput {
 }
 
 impl Output for FileOutput {
-    fn name(&self) -> &'static str {
-        return "file";
-    }
-
     fn feed(&mut self, payload: &Payload) {
         let mut path = String::new();
         for token in self.path.iter() {
