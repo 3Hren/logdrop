@@ -70,7 +70,7 @@ fn run(inputs: Vec<Box<Input + Send>>, outputs: Vec<Box<Output + Send>>) {
         });
     }
 
-    let channels: Vec<Sender<Payload>> = outputs.move_iter().map(|output| {
+    let channels: Vec<Sender<Payload>> = outputs.into_iter().map(|output| {
         let(tx, rx) = channel();
         spawn(proc() {
             log!(Info, "Main" -> "starting '{}' output", output.name());

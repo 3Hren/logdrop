@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::hashmap::{Vacant, Occupied};
 use std::io::{File, Append, Write};
 
 use serialize::json::{String, List, Object};
@@ -52,7 +53,7 @@ impl<T: Iterator<char>> FormatParser<T> {
 
     fn parse_literal(&mut self, ch: char) -> Option<ParserEvent> {
         let mut result = String::new();
-        result.push_char(ch);
+        result.push(ch);
 
         loop {
             match self.reader.next() {
@@ -60,7 +61,7 @@ impl<T: Iterator<char>> FormatParser<T> {
                     self.state = ParsePlaceholder;
                     break
                 }
-                Some(ch) => { result.push_char(ch) }
+                Some(ch) => { result.push(ch) }
                 None => { break }
             }
         }
@@ -80,7 +81,7 @@ impl<T: Iterator<char>> FormatParser<T> {
                     }).collect();
                     return Some(Placeholder(result));
                 }
-                Some(c) => { result.push_char(c) }
+                Some(c) => { result.push(c) }
                 None    => {
                     self.state = Broken(EOFWhileParsingPlaceholder);
                     return Some(Error(EOFWhileParsingPlaceholder));
@@ -170,10 +171,13 @@ impl Output for FileOutput {
         }
 
         let path = Path::new(path);
-        let file = self.files.find_or_insert_with(path.clone(), |path| {
-            log!(Info, "Output::File" -> "opening file '{}' for writing in append mode", path.display());
-            File::open_mode(path, Append, Write).unwrap()
-        });
+        let file = match self.files.entry(path.clone()) {
+            Vacant(entry) => {
+                log!(Info, "Output::File" -> "opening file '{}' for writing in append mode", path.display());
+                entry.set(File::open_mode(&path, Append, Write).unwrap())
+            }
+            Occupied(entry) => entry.into_mut(),
+        };
 
         let mut message = String::new();
         for token in self.message.iter() {
@@ -186,7 +190,7 @@ impl Output for FileOutput {
             };
             message.push_str(token.as_slice());
         }
-        message.push_char('\n');
+        message.push('\n');
 
         match file.write(message.as_bytes()) {
             Ok(())   => log!(Debug, "Output::File" -> "{} bytes written", message.len()),

@@ -124,7 +124,7 @@ impl<T: Iterator<char>> Parser<T> {
             'n' => self.complete("ull", NullValue),
             't' => self.complete("rue", BooleanValue(true)),
             'f' => self.complete("alse", BooleanValue(false)),
-            '-' | '0'..'9'  => self.parse_number(),
+            '-' | '0'...'9'  => self.parse_number(),
             '"' => {
                 self.bump();
                 self.parse_string()
@@ -257,14 +257,14 @@ impl<T: Iterator<char>> Parser<T> {
                 self.bump();
                 match self.char() {
                     // A leading '0' must be the only digit before the decimal point or other non-integer symbol.
-                    '0'..'9' => { return Err(SyntaxError(ToDo)) }
+                    '0'...'9' => { return Err(SyntaxError(ToDo)) }
                     _        => {}
                 }
             }
-            '1'..'9' => {
+            '1'...'9' => {
                 while !self.eof() {
                     match self.char() {
-                        c @ '0'..'9' => {
+                        c @ '0'...'9' => {
                             integer *= 10;
                             integer += ((c as int) - ('0' as int)) as u64;
                         }
@@ -285,7 +285,7 @@ impl<T: Iterator<char>> Parser<T> {
         if self.char() == '.' {
             self.bump();
             match self.char() {
-                '0'..'9' => (),
+                '0'...'9' => (),
                 // !
                  _ => return Err(SyntaxError(ToDo))
             }
@@ -293,7 +293,7 @@ impl<T: Iterator<char>> Parser<T> {
             let mut dec = 1.0;
             while !self.eof() {
                 match self.char() {
-                    c @ '0'..'9' => {
+                    c @ '0'...'9' => {
                         dec /= 10.0;
                         decimal += (((c as int) - ('0' as int)) as f64) * dec;
                     }
@@ -323,14 +323,14 @@ impl<T: Iterator<char>> Parser<T> {
 
                 // Make sure a digit follows the exponent place.
                 match self.char() {
-                    '0'..'9' => (),
+                    '0'...'9' => (),
                         // !
                     _ => return Err(SyntaxError(ToDo))
                 }
 
                 while !self.eof() {
                     match self.char() {
-                        c @ '0'..'9' => {
+                        c @ '0'...'9' => {
                             exponent *= 10;
                             exponent += (c as uint) - ('0' as uint);
                         }
@@ -386,20 +386,20 @@ impl<T: Iterator<char>> Parser<T> {
 
             if escape {
                 match self.char() {
-                    '"'  => result.push_char('"'),
-                    '\\' => result.push_char('\\'),
-                    '/'  => result.push_char('/'),
-                    'b'  => result.push_char('\x08'),
-                    'f'  => result.push_char('\x0c'),
-                    'n'  => result.push_char('\n'),
-                    'r'  => result.push_char('\r'),
-                    't'  => result.push_char('\t'),
+                    '"'  => result.push('"'),
+                    '\\' => result.push('\\'),
+                    '/'  => result.push('/'),
+                    'b'  => result.push('\x08'),
+                    'f'  => result.push('\x0c'),
+                    'n'  => result.push('\n'),
+                    'r'  => result.push('\r'),
+                    't'  => result.push('\t'),
                     'u' => match try!(self.decode_hex_escape()) {
-                        0xDC00 .. 0xDFFF => return Err(SyntaxError(LoneLeadingSurrogateInHexEscape)),
+                        0xDC00 ... 0xDFFF => return Err(SyntaxError(LoneLeadingSurrogateInHexEscape)),
 
                         // Non-BMP characters are encoded as a sequence of
                         // two hex escapes, representing UTF-16 surrogates.
-                        n1 @ 0xD800 .. 0xDBFF => {
+                        n1 @ 0xD800 ... 0xDBFF => {
                             match (self.next_char(), self.next_char()) {
                                 (Some('\\'), Some('u')) => (),
                                 _ => return Err(SyntaxError(UnexpectedEndOfHexEscape)),
@@ -407,13 +407,13 @@ impl<T: Iterator<char>> Parser<T> {
 
                             let buf = [n1, try!(self.decode_hex_escape())];
                             match str::utf16_items(buf.as_slice()).next() {
-                                Some(ScalarValue(c)) => result.push_char(c),
+                                Some(ScalarValue(c)) => result.push(c),
                                 _ => return Err(SyntaxError(LoneLeadingSurrogateInHexEscape)),
                             }
                         }
 
                         n => match char::from_u32(n as u32) {
-                            Some(c) => result.push_char(c),
+                            Some(c) => result.push(c),
                             None => return Err(SyntaxError(InvalidUnicodeCodePoint)),
                         },
                     },
@@ -428,7 +428,7 @@ impl<T: Iterator<char>> Parser<T> {
                         self.handled = true;
                         return Ok(result);
                     },
-                    c => result.push_char(c)
+                    c => result.push(c)
                 }
             }
 
@@ -477,7 +477,7 @@ impl<T: Iterator<char>> Parser<T> {
         while i < 4 && !self.eof() {
             self.bump();
             n = match self.char() {
-                c @ '0' .. '9' => n * 16 + ((c as u16) - ('0' as u16)),
+                c @ '0' ... '9' => n * 16 + ((c as u16) - ('0' as u16)),
                 'a' | 'A' => n * 16 + 10,
                 'b' | 'B' => n * 16 + 11,
                 'c' | 'C' => n * 16 + 12,
@@ -566,7 +566,7 @@ impl<T: Iterator<char>> Iterator<Json> for Builder<T> {
                 }
             }
             Some(ArrayEnd) => {
-                *self.arrays.mut_last().unwrap() = true;
+                *self.arrays.last_mut().unwrap() = true;
                 return None;
             }
             Some(ObjectEnd) => unreachable!(),

@@ -7,7 +7,6 @@ pub enum Level {
     Debug,
     Info,
     Warn,
-    Error,
 }
 
 impl ToPrimitive for Level {
@@ -16,7 +15,6 @@ impl ToPrimitive for Level {
             Debug => Some(0),
             Info  => Some(1),
             Warn  => Some(2),
-            Error => Some(3)
         }
     }
 
@@ -31,7 +29,6 @@ impl Show for Level {
             Debug => "D",
             Info  => "I",
             Warn  => "W",
-            Error => "E"
         };
         reason.fmt(f)
     }
