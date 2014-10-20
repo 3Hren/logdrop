@@ -1,6 +1,5 @@
 use super::Payload;
 
-//pub use self::files::FileInput;
 pub use self::tcp::TCPInput;
 
 use std;
@@ -13,5 +12,4 @@ pub trait Input {
     }
 }
 
-//mod files;
 mod tcp;

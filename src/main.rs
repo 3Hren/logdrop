@@ -93,7 +93,7 @@ fn run(inputs: Vec<Box<Input + Send>>, outputs: Vec<Box<Output + Send>>) {
         match payload {
             Object(ref mut object) => {
                 let now = time::now();
-                let timestamp = time::strftime("%Y-%m-%d %H:%M:%S", &now);
+                let timestamp = now.strftime("%Y-%m-%d %H:%M:%S").unwrap();
                 object.insert("timestamp".to_string(), String(timestamp));
             }
             _ => { unreachable!(); }
@@ -106,7 +106,8 @@ fn run(inputs: Vec<Box<Input + Send>>, outputs: Vec<Box<Output + Send>>) {
 }
 
 fn main() {
-    let es = box ElasticsearchOutput::new("localhost", 9200) as Box<Output + Send>;
+//    let es = box ElasticsearchOutput::new("localhost", 9200) as Box<Output + Send>;
+
     let inputs = vec![
         box TCPInput::new("::", 10053) as Box<Input + Send>,
     ];
