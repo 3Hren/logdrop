@@ -14,5 +14,5 @@ pub trait Output {
 }
 
 mod files;
-mod elasticsearch;
+//mod elasticsearch;
 

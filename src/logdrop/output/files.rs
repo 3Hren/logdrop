@@ -11,19 +11,19 @@ use super::Output;
 use logdrop::Payload;
 use logdrop::logger::{Debug, Info, Warn};
 
-#[deriving(Show, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum ParserError {
     EOFWhileParsingPlaceholder,
 }
 
-#[deriving(Show, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum ParserEvent {
     Literal(String),
     Placeholder(Vec<String>),
     Error(ParserError),
 }
 
-#[deriving(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 enum ParserState {
     Undefined,           // At start or after parsing value in streaming mode.
     ParsePlaceholder,    // Just after literal.
@@ -101,7 +101,7 @@ impl<T: Iterator<char>> Iterator<ParserEvent> for FormatParser<T> {
     }
 }
 
-#[deriving(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 enum TokenError<'r> {
     KeyNotFound(&'r str),
     TypeMismatch,

@@ -1,7 +1,7 @@
 #![experimental]
 
 use std::fmt;
-use std::fmt::{Show, Formatter};
+use std::fmt::{Debug, Formatter};
 
 pub enum Level {
     Debug,
@@ -23,7 +23,7 @@ impl ToPrimitive for Level {
     }
 }
 
-impl Show for Level {
+impl Debug for Level {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let reason = match *self {
             Debug => "D",
