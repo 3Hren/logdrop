@@ -5,3 +5,8 @@ CMakeLists.txt
 target
 
 a.out
+logdrop.config
+logdrop.creator
+logdrop.creator.user
+logdrop.files
+logdrop.includes
