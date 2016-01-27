@@ -1,18 +1,17 @@
-use super::Payload;
-
 use std;
 
-pub use self::files::FileOutput;
-pub use self::elasticsearch::ElasticsearchOutput;
+use super::Record;
 
-pub trait Output {
-    fn feed(&mut self, payload: &Payload);
+pub trait Output : Sync + Send {
+    fn feed(&mut self, payload: &Record);
 
     fn typename(&self) -> &'static str {
-        unsafe { (*std::intrinsics::get_tydesc::<Self>()).name }
+        unsafe { std::intrinsics::type_name::<Self>() }
     }
 }
 
-mod files;
-//mod elasticsearch;
+mod null;
+//mod files;
 
+//pub use self::files::FileOutput;
+pub use self::null::Null;

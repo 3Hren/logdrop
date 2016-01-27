@@ -1,13 +1,23 @@
 use std::char;
 use std::collections::BTreeMap;
 
-pub enum Json {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
     Null,
     Bool(bool),
     F64(f64),
     String(String),
-    List(Vec<Json>),
-    Object(BTreeMap<String, Json>),
+    List(Vec<Value>),
+    Object(BTreeMap<String, Value>),
+}
+
+impl Value {
+    pub fn find(&self, key: &str) -> Option<&Value> {
+        match self {
+            &Value::Object(ref map) => map.get(key),
+            _ => None
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -531,14 +541,14 @@ impl<T: Iterator<Item = char>> Builder<T> {
 }
 
 impl<T: Iterator<Item = char>> Iterator for Builder<T> {
-    type Item = Json;
+    type Item = Value;
 
-    fn next(&mut self) -> Option<Json> {
+    fn next(&mut self) -> Option<Value> {
         match self.parser.next() {
-            Some(JsonEvent::NullValue) => Some(Json::Null),
-            Some(JsonEvent::BooleanValue(v)) => Some(Json::Bool(v)),
-            Some(JsonEvent::NumberValue(v)) => Some(Json::F64(v)),
-            Some(JsonEvent::StringValue(v)) => Some(Json::String(v)),
+            Some(JsonEvent::NullValue) => Some(Value::Null),
+            Some(JsonEvent::BooleanValue(v)) => Some(Value::Bool(v)),
+            Some(JsonEvent::NumberValue(v)) => Some(Value::F64(v)),
+            Some(JsonEvent::StringValue(v)) => Some(Value::String(v)),
             Some(JsonEvent::ArrayBegin) => {
                 let mut array = Vec::new();
                 self.arrays.push(false);
@@ -548,7 +558,7 @@ impl<T: Iterator<Item = char>> Iterator for Builder<T> {
                         None => {
                             if *self.arrays.last().unwrap() {
                                 self.arrays.pop();
-                                return Some(Json::List(array));
+                                return Some(Value::List(array));
                             } else {
                                 return None;
                             }
@@ -562,7 +572,7 @@ impl<T: Iterator<Item = char>> Iterator for Builder<T> {
                 loop {
                     let key = match self.parser.next().unwrap() {
                         JsonEvent::StringValue(v) => v,
-                        JsonEvent::ObjectEnd => return Some(Json::Object(object)),
+                        JsonEvent::ObjectEnd => return Some(Value::Object(object)),
                         _ => panic!("parse error - must be key or object end")
                     };
                     let value = self.next().unwrap();
@@ -998,14 +1008,14 @@ fn parse_null() {
 //    assert_eq!(Some(Error(BrokenParser)), parser.next());
 //}
 
-//// Builder test case.
+// Builder test case.
 
-//#[test]
-//fn build_null() {
-//    let mut builder = Builder::new("null".chars());
-//    assert_eq!(Some(Null), builder.next());
-//    assert_eq!(None, builder.next());
-//}
+#[test]
+fn build_null() {
+    let mut builder = Builder::new("null".chars());
+    assert_eq!(Some(Value::Null), builder.next());
+    assert_eq!(None, builder.next());
+}
 
 //#[test]
 //fn build_true() {
@@ -1211,35 +1221,41 @@ fn parse_null() {
 
 } // mod test
 
-//#[cfg(test)]
-//mod benchmarking {
+#[cfg(test)]
+mod benchmarking {
 
-//extern crate test;
-//use self::test::Bencher;
-//use super::{Builder};
+extern crate test;
+
+use self::test::Bencher;
+
+use super::{Builder};
+
 //use serialize::json;
 //use serialize::json::{Parser};
 
-//#[bench]
-//fn small(b: &mut Bencher) {
-//    let raw = r#"{
-//        "a": 1.0,
-//        "b": [
-//            true,
-//            "foo\nbar",
-//            { "c": {"d": null} }
-//        ]
-//    }"#;
-//    b.iter(|| {
-//        let mut builder = Builder::new(raw.chars());
-//        loop {
-//            match builder.next() {
-//                None => break,
-//                Some(c) => {}
-//            }
-//        }
-//    });
-//}
+#[bench]
+fn small(b: &mut Bencher) {
+    let raw = r#"{
+        "a": 1.0,
+        "b": [
+            true,
+            "foo\nbar",
+            { "c": {"d": null} }
+        ]
+    }"#;
+
+    b.iter(|| {
+        let mut builder = Builder::new(raw.chars());
+        loop {
+            match builder.next() {
+                None => break,
+                Some(c) => {
+                    test::black_box(c);
+                }
+            }
+        }
+    });
+}
 
 //#[bench]
 //fn small_std(b: &mut Bencher) {
@@ -1256,4 +1272,4 @@ fn parse_null() {
 //    });
 //}
 
-//} // mod benchmarking
+} // mod benchmarking

@@ -1,112 +1,89 @@
-//extern crate time;
+#![feature(core, convert, io, path_ext, test)]
 
-//use serialize::json::{String, Object};
+#[macro_use]
+extern crate log;
+extern crate libc;
+extern crate chrono;
+extern crate rmp as msgpack;
 
-//use logdrop::Payload;
-//use logdrop::logger::{Debug, Info, Warn};
-//use logdrop::input::{Input, TCPInput};
-//use logdrop::output::{Output, FileOutput, ElasticsearchOutput};
+use std::sync::mpsc::channel;
+use std::sync::mpsc::Sender;
+use std::thread;
+
+use log::LogLevel;
+
+use logdrop::codec;
+use logdrop::codec::Codec;
+use logdrop::input::{Input, TcpInput};
+use logdrop::logging;
+use logdrop::output::{Output, Null};
+use logdrop::Record;
 
 mod logdrop;
 
-//// Input - event driven entity, that reads something as bytes.
-////  - socket
-////  - file
-////  - stdin
-////  - ...
+fn run(inputs: Vec<(Box<Input>, Box<Codec>)>, outputs: Vec<Box<Output>>) {
+    let (tx, rx) = channel();
 
-//// Decoder - converter from bytes to json.
-////  - json:  byte -> json
-////  - plain: byte -> textline -> json
-////  - ...
+    for (input, codec) in inputs.into_iter() {
+        trace!(target: "Main", "starting '{}' input", input.typename());
 
-//// Pipeline - thing, that consumes json and process with its fields.
-////  - add timestamp, if it isn't present
-////  - check for message field, fail if not (why?)
-////  - ...
+        let tx = tx.clone();
+        thread::spawn(move || {
+            input.run(tx, codec)
+        });
+    }
 
-//// Output - thing, that consumes json with fields and writes it into some sink.
-//// Guaranteed, that event contains some required fields, like message or timestamp.
-////  - file
-////  - elasticsearch
-////  - ...
+    let channels: Vec<Sender<Record>> = outputs.into_iter().map(|mut output| {
+        let(tx, rx) = channel();
+        thread::spawn(move || {
+            trace!(target: "Main", "starting '{}' output", output.typename());
 
-//#[derive(Debug)]
-//pub enum ProcessorError {
-//    NotFound,
-//}
+            loop {
+                output.feed(&rx.recv().unwrap());
+            }
+        });
 
-//trait Processor {
-//    fn contains(&self, key: &str) -> bool;
-////    fn timestamp(&mut self);
-//}
+        tx
+    }).collect();
 
-//impl Processor for Payload {
-//    fn contains(&self, key: &str) -> bool {
-//        let key = String::from_str(key);
-//        match self.find(&key) {
-//            Some(_) => true,
-//            None => false
-//        }
-//    }
-//}
+    loop {
+        debug!(target: "Main", "waiting for new data ...");
 
-//fn run(inputs: Vec<Box<Input + Send>>, outputs: Vec<Box<Output + Send>>) {
-//    let (tx, rx) = channel();
+        let mut value = rx.recv().unwrap();
+        trace!(target: "Main", "processing {:?}", value);
 
-//    for input in inputs.into_iter() {
-//        log!(Info, "Main" -> "starting '{}' input", input.typename());
-//        let tx = tx.clone();
-//        spawn(proc() {
-//            input.run(tx)
-//        });
-//    }
+        if value.find("message").is_none() {
+            warn!(target: "Main", "dropping '{:?}': message field required", value);
+            continue;
+        }
 
-//    let channels: Vec<Sender<Payload>> = outputs.into_iter().map(|output| {
-//        let(tx, rx) = channel();
-//        spawn(proc() {
-//            log!(Info, "Main" -> "starting '{}' output", output.typename());
-//            let mut output = output;
-//            loop {
-//                output.feed(&rx.recv());
+//        match value {
+//            Value::Object(ref mut object) => {
+//                let now = chrono::Local::now();
+//                object.insert("timestamp".to_string(), Value::String(format!("{}", now)));
 //            }
-//        });
-//        tx
-//    }).collect();
-
-//    loop {
-//        log!(Debug, "Main" -> "waiting for new data ...");
-//        let mut payload = rx.recv();
-//        if !payload.contains("message") {
-//            log!(Warn, "Main" -> "dropping '{}': message field required", payload);
-//            continue;
+//            _ => { unimplemented!() }
 //        }
 
-//        match payload {
-//            Object(ref mut object) => {
-//                let now = time::now();
-//                let timestamp = now.strftime("%Y-%m-%d %H:%M:%S").unwrap();
-//                object.insert("timestamp".to_string(), String(timestamp));
-//            }
-//            _ => { unreachable!(); }
-//        }
-
-//        for tx in channels.iter() {
-//            tx.send(payload.clone());
-//        }
-//    }
-//}
+        for tx in channels.iter() {
+            tx.send(value.clone()).unwrap();
+        }
+    }
+}
 
 fn main() {
-////    let es = box ElasticsearchOutput::new("localhost", 9200) as Box<Output + Send>;
+    use logdrop::codec::Codec;
 
-//    let inputs = vec![
-//        box TCPInput::new("::", 10053) as Box<Input + Send>,
-//    ];
+    logging::init(LogLevel::Info).ok().expect("unable to initialize logging system");
 
-//    let outputs = vec![
-//        box FileOutput::new("/tmp/{parent/child}-{source}-logdrop.log", "[{timestamp}]: {message}") as Box<Output + Send>,
-////        box ElasticsearchOutput::new("localhost", 9200) as Box<Output + Send>,
-//    ];
-//    run(inputs, outputs);
+    let inputs: Vec<(Box<Input>, Box<Codec>)> = vec![
+        (Box::new(TcpInput::new("::".to_string(), 10053)), Box::new(codec::MessagePack)),
+    ];
+
+    let outputs: Vec<Box<Output>> = vec![
+        Box::new(Null)
+//        Box::new(FileOutput::new("/tmp/{parent/child}-{source}-logdrop.log", "[{timestamp}]: {message}")) as Box<Output + Sync +Send>,
+//        box ElasticsearchOutput::new("localhost", 9200) as Box<Output + Send>,
+    ];
+    run(inputs, outputs);
 }

@@ -3,3 +3,9 @@
 name = "logdrop"
 version = "0.1.0"
 authors = ["Evgeny Safronov <division494@gmail.com>"]
+
+[dependencies]
+libc = "0.1"
+chrono = "0.2"
+log = "0.3"
+rmp = "*"

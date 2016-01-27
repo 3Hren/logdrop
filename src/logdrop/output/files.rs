@@ -1,17 +1,14 @@
 use std::collections::HashMap;
-use std::collections::hashmap::{Vacant, Occupied};
-use std::io::{File, Append, Write};
+use std::fs::{File, OpenOptions, PathExt};
+use std::io::Write;
+use std::path::Path;
 
-use serialize::json::{String, List, Object};
+use libc;
 
-use time;
-
+use super::super::Record;
 use super::Output;
 
-use logdrop::Payload;
-use logdrop::logger::{Debug, Info, Warn};
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum ParserError {
     EOFWhileParsingPlaceholder,
 }
@@ -35,11 +32,11 @@ struct FormatParser<T> {
     state: ParserState,
 }
 
-impl<T: Iterator<char>> FormatParser<T> {
+impl<T: Iterator<Item = char>> FormatParser<T> {
     fn new(reader: T) -> FormatParser<T> {
         FormatParser {
             reader: reader,
-            state: Undefined
+            state: ParserState::Undefined
         }
     }
 
@@ -58,7 +55,7 @@ impl<T: Iterator<char>> FormatParser<T> {
         loop {
             match self.reader.next() {
                 Some('{') => {
-                    self.state = ParsePlaceholder;
+                    self.state = ParserState::ParsePlaceholder;
                     break
                 }
                 Some(ch) => { result.push(ch) }
@@ -66,7 +63,7 @@ impl<T: Iterator<char>> FormatParser<T> {
             }
         }
 
-        Some(Literal(result))
+        Some(ParserEvent::Literal(result))
     }
 
     fn parse_placeholder(&mut self) -> Option<ParserEvent> {
@@ -75,28 +72,30 @@ impl<T: Iterator<char>> FormatParser<T> {
         loop {
             match self.reader.next() {
                 Some('}') => {
-                    self.state = Undefined;
-                    let result = result.as_slice().split('/').map(|s: &str| {
-                        String::from_str(s)
+                    self.state = ParserState::Undefined;
+                    let result = result.split('/').map(|v| {
+                        v.to_string()
                     }).collect();
-                    return Some(Placeholder(result));
+                    return Some(ParserEvent::Placeholder(result));
                 }
                 Some(c) => { result.push(c) }
                 None    => {
-                    self.state = Broken(EOFWhileParsingPlaceholder);
-                    return Some(Error(EOFWhileParsingPlaceholder));
+                    self.state = ParserState::Broken(ParserError::EOFWhileParsingPlaceholder);
+                    return Some(ParserEvent::Error(ParserError::EOFWhileParsingPlaceholder));
                 }
             }
         }
     }
 }
 
-impl<T: Iterator<char>> Iterator<ParserEvent> for FormatParser<T> {
+impl<T: Iterator<Item = char>> Iterator for FormatParser<T> {
+    type Item = ParserEvent;
+
     fn next(&mut self) -> Option<ParserEvent> {
         match self.state {
-            Undefined        => self.parse(),
-            ParsePlaceholder => self.parse_placeholder(),
-            Broken(err)      => Some(Error(err)),
+            ParserState::Undefined        => self.parse(),
+            ParserState::ParsePlaceholder => self.parse_placeholder(),
+            ParserState::Broken(err)      => Some(ParserEvent::Error(err)),
         }
     }
 }
@@ -108,26 +107,26 @@ enum TokenError<'r> {
     SyntaxError(ParserError),
 }
 
-fn consume<'r>(event: &'r ParserEvent, payload: &Payload) -> Result<String, TokenError<'r>> {
+fn consume<'r>(event: &'r ParserEvent, payload: &Record) -> Result<String, TokenError<'r>> {
     match *event {
-        Literal(ref value) => { Ok(value.clone()) }
-        Placeholder(ref placeholders) => {
+        ParserEvent::Literal(ref value) => { Ok(value.clone()) }
+        ParserEvent::Placeholder(ref placeholders) => {
             let mut current = payload;
             for key in placeholders.iter() {
                 match current.find(key) {
                     Some(v) => { current = v; }
-                    None    => { return Err(KeyNotFound(key.as_slice())); }
+                    None    => { return Err(TokenError::KeyNotFound(&key)); }
                 }
             }
 
             match *current {
-                String(ref v)  => Ok(v.clone()),
-                List  (ref _v) => Err(TypeMismatch),
-                Object(ref _v) => Err(TypeMismatch),
-                ref v @ _      => Ok(v.to_string()),
+                RecordItem::String(ref v) => Ok(v.clone()),
+                RecordItem::Array(..) => Err(TokenError::TypeMismatch),
+                RecordItem::Object(..) => Err(TokenError::TypeMismatch),
+                ref other => Ok(format!("{:?}", other)),
             }
         }
-        Error(err) => { Err(SyntaxError(err)) }
+        ParserEvent::Error(err) => { Err(TokenError::SyntaxError(err)) }
     }
 }
 
@@ -140,7 +139,7 @@ fn consume<'r>(event: &'r ParserEvent, payload: &Payload) -> Result<String, Toke
 pub struct FileOutput {
     path: Vec<ParserEvent>,
     message: Vec<ParserEvent>,
-    files: HashMap<Path, File>,
+    files: HashMap<u64, File>,
 }
 
 impl FileOutput {
@@ -154,43 +153,76 @@ impl FileOutput {
 }
 
 impl Output for FileOutput {
-    fn feed(&mut self, payload: &Payload) {
+    fn feed(&mut self, payload: &Record) {
         let mut path = String::new();
         for token in self.path.iter() {
             match consume(token, payload) {
-                Ok(token) => path.push_str(token.as_slice()),
+                Ok(token) => path.push_str(&token),
                 Err(err) => {
-                    log!(Warn, "Output::File" -> "dropping {} while parsing path format - {}", payload, err);
+                    warn!(target: "Output::File", "dropping {:?} while parsing path format - {:?}", payload, err);
                     return;
                 }
             }
         }
 
-        let path = Path::new(path);
-        let file = match self.files.entry(path.clone()) {
-            Vacant(entry) => {
-                log!(Info, "Output::File" -> "opening file '{}' for writing in append mode", path.display());
-                entry.set(File::open_mode(&path, Append, Write).unwrap())
-            }
-            Occupied(entry) => entry.into_mut(),
+        let path = Path::new(&path);
+        let mut stat = libc::stat {
+            st_dev: 0,
+            st_ino: 0,
+            st_nlink: 0,
+            st_mode: 0,
+            st_uid: 0,
+            st_gid: 0,
+            st_rdev: 0,
+            st_size: 0,
+            st_blksize: 0,
+            st_blocks: 0,
+            st_atime: 0,
+            st_atime_nsec: 0,
+            st_mtime: 0,
+            st_mtime_nsec: 0,
+            st_ctime: 0,
+            st_ctime_nsec: 0,
+            st_birthtime: 0,
+            st_birthtime_nsec: 0,
+            st_flags: 0,
+            st_gen: 0,
+            st_lspare: 0,
+            st_qspare: [0, 2],
         };
+
+        if !path.exists() {
+            File::create(path).unwrap();
+        }
+
+        unsafe {
+            if libc::stat(path.as_os_str().to_cstring().unwrap().as_ptr(), &mut stat) != 0 {
+                warn!(target: "Output::File", "unable to get inode, dropping");
+                return;
+            }
+        }
+
+        let file = self.files.entry(stat.st_ino).or_insert_with(|| {
+            info!(target: "Output::File", "opening file '{}' for writing in append mode", path.display());
+            OpenOptions::new().append(true).write(true).open(&path).unwrap()
+        });
 
         let mut message = String::new();
         for token in self.message.iter() {
             let token = match consume(token, payload) {
                 Ok(token) => token,
                 Err(err) => {
-                    log!(Warn, "Output::File" -> "dropping {} while parsing message format - {}", payload, err);
+                    warn!(target: "Output::File", "dropping {:?} while parsing message format - {:?}", payload, err);
                     return;
                 }
             };
-            message.push_str(token.as_slice());
+            message.push_str(&token);
         }
         message.push('\n');
 
-        match file.write(message.as_bytes()) {
-            Ok(())   => log!(Debug, "Output::File" -> "{} bytes written", message.len()),
-            Err(err) => log!(Warn, "Output::File" -> "writing error - {}", err)
+        match file.write_all(message.as_bytes()) {
+            Ok(())   => debug!(target: "Output::File", "{} bytes written", message.len()),
+            Err(err) => warn!(target: "Output::File", "writing error - {}", err)
         }
     }
 }
